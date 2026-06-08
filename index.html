@@ -155,6 +155,17 @@
         <button class="valor-btn" id="btn-mes"   onclick="canviarValor(1)"  disabled>+</button>
       </div>
       <div id="missatge"></div>
+      <div id="explicacio-area" style="display:none;margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <label id="lbl-explicacio" style="font-size:12px;font-weight:600;color:var(--text-muted)"></label>
+          <span id="lbl-dia-pendent" style="font-size:11px;color:var(--primary);font-weight:600"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <textarea id="inp-explicacio" rows="2" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fff;outline:none;resize:none;-webkit-appearance:none" oninput="this.style.borderColor='var(--primary)'"></textarea>
+          <button id="btn-confirmar-nota" onclick="if(_diaPendent)_desarDia(_diaPendent,document.getElementById('inp-explicacio').value.trim())" style="width:42px;height:42px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:22px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">&#10003;</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right" id="lbl-hint-enter">↵ Enter per confirmar</div>
+      </div>
     </div>
 
     <div class="card">
@@ -223,6 +234,9 @@ const T = {
     hores_sufix:      'h hores',
     dia_restaurat:    (d)     => `✓ Dia ${d} restaurat`,
     dia_desat:        (v)     => `✓ Dia desat ${v>=0?'+':''}${v}h`,
+    explicacio_label: 'Explicació:',
+    explicacio_placeholder: 'Motiu o descripció...',
+    hint_enter: '↵ Enter per confirmar',
     copia_exportada:  '✓ Còpia exportada',
     copia_restaurada: '✓ Còpia restaurada',
     mes_esborrat:     '✓ Mes esborrat',
@@ -248,6 +262,7 @@ const T = {
       { nom:' Fer Flexi',   hex:'#FFF59D', tc:'#212121' },
       { nom:'Tornar Flexi', hex:'#FFF59D', tc:'#212121' },
       { nom:'Vacances',     hex:'#781862', tc:'#FFF59D' },
+      { nom:'Permisos',     hex:'#FFB74D', tc:'#212121' },
     ],
     colors_text: [
       { nom:'Laborable', hex:'#000000' },
@@ -277,6 +292,9 @@ const T = {
     hores_sufix:      'h horas',
     dia_restaurat:    (d)     => `✓ Día ${d} restaurado`,
     dia_desat:        (v)     => `✓ Día guardado ${v>=0?'+':''}${v}h`,
+    explicacio_label: 'Explicación:',
+    explicacio_placeholder: 'Motivo o descripción...',
+    hint_enter: '↵ Enter para confirmar',
     copia_exportada:  '✓ Copia exportada',
     copia_restaurada: '✓ Copia restaurada',
     mes_esborrat:     '✓ Mes borrado',
@@ -302,6 +320,7 @@ const T = {
       { nom:'Hacer Flexi',   hex:'#FFF59D', tc:'#212121' },
       { nom:'Devolver Flexi', hex:'#FFF59D', tc:'#212121' },
       { nom:'Vacaciones',   hex:'#781862', tc:'#FFF59D' },
+      { nom:'Permisos',     hex:'#FFB74D', tc:'#212121' },
     ],
     colors_text: [
       { nom:'Laborable', hex:'#000000' },
@@ -331,6 +350,9 @@ function aplicarIdioma() {
   document.getElementById('lbl-reset-total').textContent     = i18n.reset_total;
   document.getElementById('modal-no').textContent            = i18n.modal_no;
   document.getElementById('modal-si').textContent            = i18n.modal_si;
+  document.getElementById('lbl-explicacio').textContent      = i18n.explicacio_label;
+  document.getElementById('inp-explicacio').placeholder      = i18n.explicacio_placeholder;
+  document.getElementById('lbl-hint-enter').textContent      = i18n.hint_enter;
 }
 aplicarIdioma();
 
@@ -417,6 +439,7 @@ function calcularHores(nom) {
 function ciclarColor(t) {
   if (t==='fons') { idxFons=(idxFons+1)%COLORS_FONS.length; pintarBadgeFons(); }
   else            { idxText=(idxText+1)%COLORS_TEXT.length;  pintarBadgeText(); }
+  actualitzarControls();
 }
 
 function pintarBadgeFons() {
@@ -438,6 +461,12 @@ function actualitzarControls() {
   document.getElementById('btn-text').disabled  = !text;
   document.getElementById('btn-menys').disabled = !valor;
   document.getElementById('btn-mes').disabled   = !valor;
+  // Mostrar camp explicació: si és Permisos (sempre), o si valor ≠ 8
+  const nomFons = COLORS_FONS[idxFons].nom;
+  const esPermisos = (nomFons === 'Permisos');
+  const horesNoEstandard = valor && valorDia !== 8;
+  const mostrarExplicacio = fons && esPermisos || horesNoEstandard;
+  document.getElementById('explicacio-area').style.display = mostrarExplicacio ? 'block' : 'none';
 }
 
 function canviarValor(delta) {
@@ -446,6 +475,7 @@ function canviarValor(delta) {
   v = Math.max(-8, Math.min(8, v));
   valorDia = v;
   pintarDisplayValor();
+  actualitzarControls();
 }
 function pintarDisplayValor() {
   const el = document.getElementById('valor-display');
@@ -453,7 +483,11 @@ function pintarDisplayValor() {
   el.style.color = valorDia>=0 ? '#1976D2' : '#E53935';
 }
 
-function seleccionarDia(clau) {
+// Dia pendent quan cal introduir explicació
+let _diaPendent = null;
+
+function _calcularEntradaDia(clau) {
+  // Retorna {nouFons, nomEfectiu, nouText, val} o null si és restauració
   const [a,m,d] = clau.split('-').map(Number);
   const dw = diaSetmana(a,m,d);
   const esDs=(dw===5), esDg=(dw===6);
@@ -463,10 +497,7 @@ function seleccionarDia(clau) {
   const chkV = document.getElementById('chk-valor').checked;
   const nomFons = COLORS_FONS[idxFons].nom;
 
-  if (chkF && nomFons==='Laborable') {
-    delete memoria[clau];
-    desarTot(); mostrarMissatge(i18n.dia_restaurat(d)); renderTot(); return;
-  }
+  if (chkF && nomFons==='Laborable') return {restaurar:true, d};
 
   const nouFons = chkF ? COLORS_FONS[idxFons].hex : (infoEx.fons||COLOR_DEF);
   const nomEfectiu = chkF ? nomFons : (COLORS_FONS.find(x=>x.hex===nouFons)?.nom||'');
@@ -483,14 +514,70 @@ function seleccionarDia(clau) {
   else if (nomEfectiu==='-Flexi'||nomEfectiu==='Tornar Flexi') { val=-8; }
   else { val = (esDs||esDg||(nouText===HEX_FESTIU)) ? 8 : -8; }
 
-  if (nouFons===COLOR_DEF && nouText===null) { delete memoria[clau]; }
+  const esPermisos = chkF && (nomEfectiu === 'Permisos');
+  const horesNoEstandard = chkV && valorDia !== 8;
+  const needsNota = esPermisos || horesNoEstandard;
+
+  return {nouFons, nomEfectiu, nouText, val, needsNota, d};
+}
+
+function _desarDia(clau, nota) {
+  const e = _calcularEntradaDia(clau);
+  if (!e) return;
+  const [a,m,d2] = clau.split('-').map(Number);
+  if (e.restaurar) {
+    delete memoria[clau];
+    desarTot(); mostrarMissatge(i18n.dia_restaurat(e.d)); renderTot(); return;
+  }
+  const infoEx = memoria[clau]||{};
+  if (e.nouFons===COLOR_DEF && e.nouText===null) { delete memoria[clau]; }
   else {
-    const ni = { fons:nouFons, valor:val, nota:infoEx.nota||'' };
-    if (nouText!==null) ni.text=nouText;
+    const notaDesar = e.needsNota ? (nota||'') : (infoEx.nota||'');
+    const ni = { fons:e.nouFons, valor:e.val, nota:notaDesar };
+    if (e.nouText!==null) ni.text=e.nouText;
     memoria[clau]=ni;
   }
-  desarTot(); mostrarMissatge(i18n.dia_desat(val)); renderTot();
+  document.getElementById('inp-explicacio').value = '';
+  document.getElementById('inp-explicacio').style.borderColor = 'var(--border)';
+  document.getElementById('lbl-dia-pendent').textContent = '';
+  _diaPendent = null;
+  desarTot(); mostrarMissatge(i18n.dia_desat(e.val)); renderTot();
 }
+
+function seleccionarDia(clau) {
+  const e = _calcularEntradaDia(clau);
+  if (!e) return;
+
+  if (e.needsNota) {
+    // Desa el dia pendent i posa focus al textarea
+    _diaPendent = clau;
+    // Ressaltem el dia pendent al calendari (renderCalendari ho farà)
+    renderCalendari();
+    const inp = document.getElementById('inp-explicacio');
+    // Pre-emplenar amb nota existent si n'hi ha
+    const infoEx = memoria[clau]||{};
+    inp.value = infoEx.nota || '';
+    inp.style.borderColor = 'var(--primary)';
+    // Mostrar quin dia s'està editant
+    document.getElementById('lbl-dia-pendent').textContent = `${i18n.dia_prefix} ${String(e.d).padStart(2,'0')}`;
+    inp.focus();
+    // Scroll fins al camp
+    document.getElementById('explicacio-area').scrollIntoView({behavior:'smooth', block:'nearest'});
+  } else {
+    _diaPendent = null;
+    _desarDia(clau, '');
+  }
+}
+
+// Enter al textarea → desar dia pendent
+document.getElementById('inp-explicacio').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (_diaPendent) {
+      _desarDia(_diaPendent, this.value.trim());
+    }
+  }
+});
 
 function canviarMes(d) {
   navMes+=d;
@@ -526,6 +613,7 @@ function renderCalendari() {
     const punt=(val!==0&&val!==8&&val!==-8);
     const btn=document.createElement('button');
     btn.className='dia-btn'; btn.style.background=cF;
+    if (_diaPendent === clau) btn.style.outline = '3px solid var(--primary)';
     btn.innerHTML=`<span class="dia-num" style="color:${cT}">${dia}</span><span class="dia-punt ${punt?'':'inv'}"></span>`;
     btn.onclick=()=>seleccionarDia(clau);
     grid.appendChild(btn);
@@ -537,21 +625,30 @@ function renderRegistre() {
   el.innerHTML='';
   const h2n={};
   COLORS_FONS.forEach(c=>{ if(!h2n[c.hex]) h2n[c.hex]=c.nom; });
+  const HEX_PERMISOS = COLORS_FONS.find(c=>c.nom==='Permisos')?.hex;
   const ents=[];
   for(let d=1;d<=31;d++){
     const clau=`${navAny}-${navMes}-${d}`;
     if(memoria[clau]){
       const v=memoria[clau].valor||0;
-      if(v!==-8&&v!==8&&v!==0) ents.push({dia:d,val:v,fons:memoria[clau].fons||COLOR_DEF});
+      const fons=memoria[clau].fons||COLOR_DEF;
+      const esPermisos = fons === HEX_PERMISOS;
+      const horesNoEstandard = (v!==-8&&v!==8&&v!==0);
+      if(esPermisos || horesNoEstandard) {
+        ents.push({dia:d, val:v, fons, nota:memoria[clau].nota||''});
+      }
     }
   }
   if(!ents.length){el.innerHTML=`<div class="no-dades">${i18n.sense_dades}</div>`;return;}
-  ents.forEach(({dia,val,fons})=>{
+  ents.forEach(({dia,val,fons,nota})=>{
     const nom=h2n[fons]||'';
     const div=document.createElement('div');
     div.className='reg-item'; div.style.background=fons;
     div.style.color=(fons==='#781862')?'#FFF59D':'#212121';
-    div.textContent=`${i18n.dia_prefix} ${String(dia).padStart(2,'0')}   ${val}${i18n.hores_sufix}${nom?`   [${nom}]`:''}`;
+    let txt=`${i18n.dia_prefix} ${String(dia).padStart(2,'0')}   ${val}${i18n.hores_sufix}${nom?`   [${nom}]`:''}`;
+    if(nota) txt+=`\n${nota}`;
+    div.style.whiteSpace='pre-wrap';
+    div.textContent=txt;
     el.appendChild(div);
   });
 }
