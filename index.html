@@ -572,9 +572,37 @@ function _calcularEntradaDia(clau) {
 }
 
 function _desarDia(clau, nota) {
+  if (!memoria[clau]) return;
+  memoria[clau].nota = nota;
+  document.getElementById('inp-explicacio').value = '';
+  document.getElementById('inp-explicacio').style.borderColor = 'var(--border)';
+  document.getElementById('lbl-dia-pendent').textContent = '';
+  _diaPendent = null;
+  desarTot(); mostrarMissatge(i18n.dia_desat(memoria[clau].valor||0)); renderTot();
+}
+
+function seleccionarDia(clau) {
   const e = _calcularEntradaDia(clau);
   if (!e) return;
-  const [a,m,d2] = clau.split('-').map(Number);
+
+  // Sempre desar el dia immediatament
+  _desarDiaSenseNota(clau, e);
+
+  if (e.needsNota) {
+    // Posar focus al textarea per afegir/editar la nota
+    _diaPendent = clau;
+    renderCalendari();
+    const inp = document.getElementById('inp-explicacio');
+    const infoEx = memoria[clau]||{};
+    inp.value = infoEx.nota || '';
+    inp.style.borderColor = 'var(--primary)';
+    document.getElementById('lbl-dia-pendent').textContent = `${i18n.dia_prefix} ${String(e.d).padStart(2,'0')}`;
+    inp.focus();
+    document.getElementById('explicacio-area').scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+}
+
+function _desarDiaSenseNota(clau, e) {
   if (e.restaurar) {
     delete memoria[clau];
     desarTot(); mostrarMissatge(i18n.dia_restaurat(e.d)); renderTot(); return;
@@ -582,41 +610,11 @@ function _desarDia(clau, nota) {
   const infoEx = memoria[clau]||{};
   if (e.nouFons===COLOR_DEF && e.nouText===null) { delete memoria[clau]; }
   else {
-    const notaDesar = e.needsNota ? (nota||'') : (infoEx.nota||'');
-    const ni = { fons:e.nouFons, nomFons:e.nomEfectiu, valor:e.val, nota:notaDesar };
+    const ni = { fons:e.nouFons, nomFons:e.nomEfectiu, valor:e.val, nota:infoEx.nota||'' };
     if (e.nouText!==null) ni.text=e.nouText;
     memoria[clau]=ni;
   }
-  document.getElementById('inp-explicacio').value = '';
-  document.getElementById('inp-explicacio').style.borderColor = 'var(--border)';
-  document.getElementById('lbl-dia-pendent').textContent = '';
-  _diaPendent = null;
   desarTot(); mostrarMissatge(i18n.dia_desat(e.val)); renderTot();
-}
-
-function seleccionarDia(clau) {
-  const e = _calcularEntradaDia(clau);
-  if (!e) return;
-
-  if (e.needsNota) {
-    // Desa el dia pendent i posa focus al textarea
-    _diaPendent = clau;
-    // Ressaltem el dia pendent al calendari (renderCalendari ho farà)
-    renderCalendari();
-    const inp = document.getElementById('inp-explicacio');
-    // Pre-emplenar amb nota existent si n'hi ha
-    const infoEx = memoria[clau]||{};
-    inp.value = infoEx.nota || '';
-    inp.style.borderColor = 'var(--primary)';
-    // Mostrar quin dia s'està editant
-    document.getElementById('lbl-dia-pendent').textContent = `${i18n.dia_prefix} ${String(e.d).padStart(2,'0')}`;
-    inp.focus();
-    // Scroll fins al camp
-    document.getElementById('explicacio-area').scrollIntoView({behavior:'smooth', block:'nearest'});
-  } else {
-    _diaPendent = null;
-    _desarDia(clau, '');
-  }
 }
 
 // Enter al textarea → desar dia pendent
