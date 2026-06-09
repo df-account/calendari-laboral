@@ -471,13 +471,12 @@ function calcularDiesAnuals() {
     if (esDsODg) {
       treballat = (fons === COLOR_DEF);
     } else {
-      const esFestiu   = info.text === HEX_FESTIU;
       const esVacances = fons === HEX_VACANCES;
       const esPermisos = fons === HEX_PERMISOS;
       const esFerFlexi = fons === HEX_FER_FLEXI;
       const esCC       = fons === HEX_CC;
       const esLlDisp   = fons === HEX_LL_DISP;
-      treballat = !esFestiu && !esVacances && !esPermisos && !esFerFlexi && !esCC && !esLlDisp;
+      treballat = !esVacances && !esPermisos && !esFerFlexi && !esCC && !esLlDisp;
     }
 
     if (treballat) treballats++; else noTreballats++;
@@ -610,7 +609,7 @@ function _desarDiaSenseNota(clau, e) {
   const infoEx = memoria[clau]||{};
   if (e.nouFons===COLOR_DEF && e.nouText===null) { delete memoria[clau]; }
   else {
-    const ni = { fons:e.nouFons, nomFons:e.nomEfectiu, valor:e.val, nota:infoEx.nota||'' };
+    const ni = { fons:e.nouFons, nomFons:e.nomEfectiu, valor:e.val, nota:infoEx.nota||'', festiu: e.nouText===HEX_FESTIU };
     if (e.nouText!==null) ni.text=e.nouText;
     memoria[clau]=ni;
   }
