@@ -90,6 +90,10 @@
   .modal-no{background:none;border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:14px;font-weight:600;color:var(--text-muted);cursor:pointer;font-family:'DM Sans',sans-serif}
   .modal-si{background:var(--primary);border:none;border-radius:8px;padding:8px 18px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif}
   .modal-si.perill{background:#E53935}
+  .die-card{flex:1;border-radius:var(--radius-sm);padding:12px 10px;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .die-card .die-num{font-size:28px;font-weight:700;line-height:1}
+  .die-card .die-lbl{font-size:11px;font-weight:600;text-align:center;line-height:1.3;opacity:.85}
+  .die-card .die-sub{font-size:10px;opacity:.65;text-align:center}
 </style>
 </head>
 <body>
@@ -175,6 +179,9 @@
       <div class="card-title" id="lbl-comptadors-hores" style="margin-top:4px">Comptadors d'hores</div>
       <div id="comptadors-llista"></div>
       <hr class="dv">
+      <div class="card-title" id="lbl-comptadors-dies" style="margin-top:4px">Resum de dies</div>
+      <div id="dies-anuals-llista" style="display:flex;gap:10px;margin-bottom:4px"></div>
+      <hr class="dv">
       <div class="accio-row" style="margin-bottom:10px">
         <button class="btn-accio" style="background:#C8E6C9;color:#1B5E20" onclick="exportarBackup()">&#128190; <span id="lbl-exportar-copia">Exportar c&#242;pia</span></button>
         <button class="btn-accio" style="background:#BBDEFB;color:#0D47A1" onclick="document.getElementById('inp-backup').click()">&#128194; <span id="lbl-importar-copia">Importar c&#242;pia</span></button>
@@ -237,6 +244,9 @@ const T = {
     explicacio_label: 'Explicació:',
     explicacio_placeholder: 'Motiu o descripció...',
     hint_enter: '↵ Enter per confirmar',
+    dies_treballats: 'Dies treballats',
+    dies_no_treballats: 'Dies no treballats',
+    lbl_comptadors_dies: 'Resum de dies',
     copia_exportada:  '✓ Còpia exportada',
     copia_restaurada: '✓ Còpia restaurada',
     mes_esborrat:     '✓ Mes esborrat',
@@ -260,7 +270,7 @@ const T = {
       { nom:'Laborable',    hex:'#F5F5F5', tc:'#212121' },
       { nom:'Ll. Disp.',    hex:'#35A54D', tc:'#FFFFFF' },
       { nom:' Fer Flexi',   hex:'#FFF59D', tc:'#212121' },
-      { nom:'Tornar Flexi', hex:'#FFF59D', tc:'#212121' },
+      { nom:'Tornar Flexi', hex:'#FFE082', tc:'#212121' },
       { nom:'Vacances',     hex:'#781862', tc:'#FFF59D' },
       { nom:'Permisos',     hex:'#FFB74D', tc:'#212121' },
     ],
@@ -295,6 +305,9 @@ const T = {
     explicacio_label: 'Explicación:',
     explicacio_placeholder: 'Motivo o descripción...',
     hint_enter: '↵ Enter para confirmar',
+    dies_treballats: 'Días trabajados',
+    dies_no_treballats: 'Días no trabajados',
+    lbl_comptadors_dies: 'Resumen de días',
     copia_exportada:  '✓ Copia exportada',
     copia_restaurada: '✓ Copia restaurada',
     mes_esborrat:     '✓ Mes borrado',
@@ -318,7 +331,7 @@ const T = {
       { nom:'Laborable',    hex:'#F5F5F5', tc:'#212121' },
       { nom:'L. Disp.',    hex:'#35A54D', tc:'#FFFFFF' },
       { nom:'Hacer Flexi',   hex:'#FFF59D', tc:'#212121' },
-      { nom:'Devolver Flexi', hex:'#FFF59D', tc:'#212121' },
+      { nom:'Devolver Flexi', hex:'#FFE082', tc:'#212121' },
       { nom:'Vacaciones',   hex:'#781862', tc:'#FFF59D' },
       { nom:'Permisos',     hex:'#FFB74D', tc:'#212121' },
     ],
@@ -353,6 +366,7 @@ function aplicarIdioma() {
   document.getElementById('lbl-explicacio').textContent      = i18n.explicacio_label;
   document.getElementById('inp-explicacio').placeholder      = i18n.explicacio_placeholder;
   document.getElementById('lbl-hint-enter').textContent      = i18n.hint_enter;
+  document.getElementById('lbl-comptadors-dies').textContent = i18n.lbl_comptadors_dies;
 }
 aplicarIdioma();
 
@@ -362,8 +376,13 @@ const MESOS        = i18n.mesos;
 const COLORS_FONS  = i18n.colors_fons;
 const COLORS_TEXT  = i18n.colors_text;
 
-const HEX_CC      = '#90CAF9';
-const HEX_FESTIU  = '#E53935';
+const HEX_CC          = '#90CAF9';
+const HEX_FESTIU      = '#E53935';
+const HEX_VACANCES    = '#781862';
+const HEX_PERMISOS    = '#FFB74D';
+const HEX_FER_FLEXI   = '#FFF59D';
+const HEX_TORNAR_FLEXI= '#FFE082';
+const HEX_LL_DISP     = '#35A54D';
 const COLOR_DEF   = '#F5F5F5';
 const COLOR_DS    = '#F9A825';
 const COLOR_DG    = '#E53935';
@@ -434,6 +453,37 @@ function calcularHores(nom) {
     if (dt>=inici && dt<=avui && info.fons===hex) total+=(info.valor||0);
   });
   return total;
+}
+
+function calcularDiesAnuals() {
+  const avui = new Date(); avui.setHours(0,0,0,0);
+  const inici = new Date(avui.getFullYear(), 0, 1);
+  let treballats = 0, noTreballats = 0;
+  let cur = new Date(inici);
+  while (cur <= avui) {
+    const clau = `${cur.getFullYear()}-${cur.getMonth()+1}-${cur.getDate()}`;
+    const info = memoria[clau] || {};
+    const dw = (()=>{ const x=cur.getDay(); return x===0?6:x-1; })();
+    const esDsODg = dw===5 || dw===6;
+    const fons = info.fons || COLOR_DEF;
+
+    let treballat;
+    if (esDsODg) {
+      treballat = (fons === COLOR_DEF);
+    } else {
+      const esFestiu   = info.text === HEX_FESTIU;
+      const esVacances = fons === HEX_VACANCES;
+      const esPermisos = fons === HEX_PERMISOS;
+      const esFerFlexi = fons === HEX_FER_FLEXI;
+      const esCC       = fons === HEX_CC;
+      const esLlDisp   = fons === HEX_LL_DISP;
+      treballat = !esFestiu && !esVacances && !esPermisos && !esFerFlexi && !esCC && !esLlDisp;
+    }
+
+    if (treballat) treballats++; else noTreballats++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return { treballats, noTreballats };
 }
 
 function ciclarColor(t) {
@@ -533,7 +583,7 @@ function _desarDia(clau, nota) {
   if (e.nouFons===COLOR_DEF && e.nouText===null) { delete memoria[clau]; }
   else {
     const notaDesar = e.needsNota ? (nota||'') : (infoEx.nota||'');
-    const ni = { fons:e.nouFons, valor:e.val, nota:notaDesar };
+    const ni = { fons:e.nouFons, nomFons:e.nomEfectiu, valor:e.val, nota:notaDesar };
     if (e.nouText!==null) ni.text=e.nouText;
     memoria[clau]=ni;
   }
@@ -625,14 +675,14 @@ function renderRegistre() {
   el.innerHTML='';
   const h2n={};
   COLORS_FONS.forEach(c=>{ if(!h2n[c.hex]) h2n[c.hex]=c.nom; });
-  const HEX_PERMISOS = COLORS_FONS.find(c=>c.nom==='Permisos')?.hex;
+  const HEX_PERMISOS_LOC = COLORS_FONS.find(c=>c.nom==='Permisos')?.hex;
   const ents=[];
   for(let d=1;d<=31;d++){
     const clau=`${navAny}-${navMes}-${d}`;
     if(memoria[clau]){
       const v=memoria[clau].valor||0;
       const fons=memoria[clau].fons||COLOR_DEF;
-      const esPermisos = fons === HEX_PERMISOS;
+      const esPermisos = fons === HEX_PERMISOS_LOC;
       const horesNoEstandard = (v!==-8&&v!==8&&v!==0);
       if(esPermisos || horesNoEstandard) {
         ents.push({dia:d, val:v, fons, nota:memoria[clau].nota||''});
@@ -789,7 +839,26 @@ function mostrarMissatge(txt){
   if(_mt)clearTimeout(_mt); _mt=setTimeout(()=>{el.textContent='';},3000);
 }
 
-function renderTot(){ renderCalendari(); renderRegistre(); renderComptadors(); }
+function renderDiesAnuals() {
+  const el = document.getElementById('dies-anuals-llista');
+  el.innerHTML = '';
+  const { treballats, noTreballats } = calcularDiesAnuals();
+  const any = new Date().getFullYear();
+  const subtit = `01/01/${any} — ${new Date().toLocaleDateString(i18n.locale, {day:'2-digit',month:'2-digit',year:'numeric'})}`;
+  const items = [
+    { n: treballats,    lbl: i18n.dies_treballats,    bg:'#E8F5E9', tc:'#1B5E20' },
+    { n: noTreballats,  lbl: i18n.dies_no_treballats, bg:'#FFF3E0', tc:'#E65100' },
+  ];
+  items.forEach(({n, lbl, bg, tc}) => {
+    const d = document.createElement('div');
+    d.className = 'die-card';
+    d.style.background = bg;
+    d.innerHTML = `<span class="die-num" style="color:${tc}">${n}</span><span class="die-lbl" style="color:${tc}">${lbl}</span><span class="die-sub">${subtit}</span>`;
+    el.appendChild(d);
+  });
+}
+
+function renderTot(){ renderCalendari(); renderRegistre(); renderComptadors(); renderDiesAnuals(); }
 
 pintarBadgeFons(); pintarBadgeText(); pintarDisplayValor(); actualitzarControls(); renderTot();
 
