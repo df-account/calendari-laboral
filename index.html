@@ -95,6 +95,19 @@
   .die-card .die-num{font-size:28px;font-weight:700;line-height:1}
   .die-card .die-lbl{font-size:11px;font-weight:600;text-align:center;line-height:1.3;opacity:.85}
   .die-card .die-sub{font-size:10px;opacity:.65;text-align:center}
+  /* Modal selecció Tornar Flexi */
+  .modal-overlay2{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;padding:20px}
+  .modal-overlay2.open{display:flex}
+  .modal-box2{background:#fff;border-radius:var(--radius);padding:20px;width:100%;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,.22)}
+  .modal-title2{font-size:15px;font-weight:700;margin-bottom:6px}
+  .modal-sub2{font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.4}
+  .tornar-opt{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;border:1.5px solid var(--border);margin-bottom:8px;cursor:pointer;transition:border-color .15s,background .15s;background:#fff}
+  .tornar-opt:active{background:var(--primary-light)}
+  .tornar-opt-icon{font-size:20px;flex-shrink:0}
+  .tornar-opt-txt{display:flex;flex-direction:column;gap:1px}
+  .tornar-opt-tit{font-size:13px;font-weight:700;color:var(--text)}
+  .tornar-opt-sub{font-size:11px;color:var(--text-muted);line-height:1.3}
+  .modal-cancel2{width:100%;margin-top:4px;background:none;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;font-family:'DM Sans',sans-serif}
 </style>
 </head>
 <body>
@@ -207,6 +220,16 @@
   </div>
 </div>
 
+<!-- Modal selecció tipus Tornar Flexi -->
+<div class="modal-overlay2" id="modal-tornar">
+  <div class="modal-box2">
+    <div class="modal-title2" id="modal-tornar-title"></div>
+    <div class="modal-sub2"   id="modal-tornar-sub"></div>
+    <div id="modal-tornar-opcions"></div>
+    <button class="modal-cancel2" id="modal-tornar-cancel"></button>
+  </div>
+</div>
+
 <script>
 
 // ── Detecció d'idioma pel S.O. ──
@@ -264,6 +287,21 @@ const T = {
     reset_cos:    'Segur que vols esborrar tota la memòria?',
     importar_tit: 'Importar còpia de seguretat',
     importar_cos: (data) => `Vols restaurar la còpia del ${data}? Les dades actuals es sobreescriuran.`,
+    tornar_flexi_tit: 'Com tornes el Flexi?',
+    tornar_flexi_sub: 'Tria la modalitat de devolució del dia flexible.',
+    tornar_flexi_cancel: 'Cancel·lar',
+    tornar_opcions: [
+      { id:'tornar',        icon:'↩️', tit:'Tornar',                   sub:'Resta 1 dia de Fer Flexi.' },
+      { id:'tornar_cc',     icon:'🔄', tit:'Tornar a canvi de C.C.',   sub:'Resta 1 dia de Fer Flexi i 1 dia de C.C.' },
+      { id:'tornar_ll',     icon:'🟢', tit:'Tornar a canvi de Ll. Disp.', sub:'Resta 1 dia de Ll. Disp. i 1 dia de Fer Flexi.' },
+      { id:'tornar_vac',    icon:'🏖️', tit:'Tornar a canvi de Vacances', sub:'Resta 1 dia de Vacances i 1 dia de Fer Flexi.' },
+    ],
+    tornar_labels: {
+      tornar:     'Tornar Flexi',
+      tornar_cc:  'Tornar Flexi + C.C.',
+      tornar_ll:  'Tornar Flexi + Ll. Disp.',
+      tornar_vac: 'Tornar Flexi + Vacances',
+    },
     dies:   ['Dl','Dt','Dc','Dj','Dv','Ds','Dg'],
     mesos:  ['','Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agost','Setembre','Octubre','Novembre','Desembre'],
     locale: 'ca-ES',
@@ -327,6 +365,21 @@ const T = {
     reset_cos:    '¿Seguro que quieres borrar toda la memoria?',
     importar_tit: 'Importar copia de seguridad',
     importar_cos: (data) => `¿Quieres restaurar la copia del ${data}? Los datos actuales se sobreescribirán.`,
+    tornar_flexi_tit: '¿Cómo devuelves el Flexi?',
+    tornar_flexi_sub: 'Elige la modalidad de devolución del día flexible.',
+    tornar_flexi_cancel: 'Cancelar',
+    tornar_opcions: [
+      { id:'tornar',        icon:'↩️', tit:'Devolver',                        sub:'Resta 1 día de Hacer Flexi.' },
+      { id:'tornar_cc',     icon:'🔄', tit:'Devolver a cambio de C.C.',       sub:'Resta 1 día de Hacer Flexi y 1 día de C.C.' },
+      { id:'tornar_ll',     icon:'🟢', tit:'Devolver a cambio de L. Disp.',  sub:'Resta 1 día de L. Disp. y 1 día de Hacer Flexi.' },
+      { id:'tornar_vac',    icon:'🏖️', tit:'Devolver a cambio de Vacaciones', sub:'Resta 1 día de Vacaciones y 1 día de Hacer Flexi.' },
+    ],
+    tornar_labels: {
+      tornar:     'Devolver Flexi',
+      tornar_cc:  'Devolver Flexi + C.C.',
+      tornar_ll:  'Devolver Flexi + L. Disp.',
+      tornar_vac: 'Devolver Flexi + Vacaciones',
+    },
     dies:   ['Lu','Ma','Mi','Ju','Vi','Sá','Do'],
     mesos:  ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
     locale: 'es-ES',
@@ -470,6 +523,8 @@ function calcularCC() {
     const noLab = esNoLab(clau,info);
     if (info.fons===HEX_CC) { if (!noLab) total+=(info.valor||0); }
     else if (info.fons===HEX_VAC_TREB) { total+=8; }
+    // Tornar Flexi a canvi de CC: descompta 8h de CC
+    else if (info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_cc') { total-=8; }
     else if (noLab && info.fons!==HEX_VACANCES && info.fons!==HEX_PERMISOS && info.fons!==HEX_LL_DISP) total+=8;
     cur.setDate(cur.getDate()+1);
   }
@@ -478,7 +533,25 @@ function calcularCC() {
 
 function calcularHores(nom) {
   if (nom==='C.C.') return calcularCC();
-  const k = (nom==='+Flexi'||nom==='-Flexi'||nom===' Fer Flexi'||nom==='Tornar Flexi') ? '+Flexi' : nom;
+  const isFerFlexi = (nom===' Fer Flexi'||nom==='Hacer Flexi'||nom==='+Flexi');
+  const isTornarFlexi = (nom==='Tornar Flexi'||nom==='Devolver Flexi'||nom==='-Flexi');
+  // Flexi: agrupa Fer i Tornar en un sol comptador (+Flexi)
+  if (isFerFlexi || isTornarFlexi) {
+    const c = comptadors['+Flexi']||{};
+    let total = c.valor_inicial||0;
+    const avui = new Date(); avui.setHours(0,0,0,0);
+    const inici = new Date(avui.getFullYear(),0,1);
+    Object.entries(memoria).forEach(([clau,info])=>{
+      const [a,m,d] = clau.split('-').map(Number);
+      const dt = new Date(a,m-1,d);
+      if (dt<inici || dt>avui) return;
+      if (info.fons===HEX_FER_FLEXI) total+=(info.valor||0);       // Fer Flexi: +8
+      if (info.fons===HEX_TORNAR_FLEXI) total+=(info.valor||0);    // Tornar Flexi: -8
+    });
+    return total;
+  }
+  // Vacances: inclou dies de Vac. Treb. i desconta tornar_vac
+  const k = nom;
   const c = comptadors[k]||{};
   let total = c.valor_inicial||0;
   const avui = new Date(); avui.setHours(0,0,0,0);
@@ -491,6 +564,11 @@ function calcularHores(nom) {
     if (dt<inici || dt>avui) return;
     if (info.fons===hex) total+=(info.valor||0);
     else if (hex===HEX_VACANCES && info.fons===HEX_VAC_TREB) total-=8;
+    // Si és Tornar Flexi a canvi de vacances, compta -8 al comptador Vacances
+    else if (hex===HEX_VACANCES && info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_vac') total-=8;
+    // Si és Tornar Flexi a canvi de Ll.Disp., compta -8 al comptador Ll.Disp.
+    else if (hex===HEX_LL_DISP && info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_ll') total-=8;
+    // Si és Tornar Flexi a canvi de CC, compta -8 al comptador CC... (CC té lògica pròpia via calcularCC)
   });
   return total;
 }
@@ -609,8 +687,9 @@ function _calcularEntradaDia(clau) {
   const esPermisos = chkF && (nomEfectiu === 'Permisos');
   const horesNoEstandard = chkV && valorDia !== 8;
   const needsNota = esPermisos || horesNoEstandard;
+  const esTornarFlexi = chkF && (nomEfectiu === 'Tornar Flexi' || nomEfectiu === 'Devolver Flexi');
 
-  return {nouFons, nomEfectiu, nouText, val, needsNota, d};
+  return {nouFons, nomEfectiu, nouText, val, needsNota, esTornarFlexi, d};
 }
 
 function _desarDia(clau, nota) {
@@ -627,6 +706,12 @@ function seleccionarDia(clau) {
   const e = _calcularEntradaDia(clau);
   if (!e) return;
 
+  // Si és Tornar Flexi, mostrar modal de selecció de tipus
+  if (e.esTornarFlexi) {
+    obrirModalTornarFlexi(clau, e);
+    return;
+  }
+
   // Sempre desar el dia immediatament
   _desarDiaSenseNota(clau, e);
 
@@ -642,6 +727,49 @@ function seleccionarDia(clau) {
     inp.focus();
     document.getElementById('explicacio-area').scrollIntoView({behavior:'smooth', block:'nearest'});
   }
+}
+
+function obrirModalTornarFlexi(clau, e) {
+  const [a,m,d] = clau.split('-').map(Number);
+  document.getElementById('modal-tornar-title').textContent = i18n.tornar_flexi_tit;
+  document.getElementById('modal-tornar-sub').textContent   = `${i18n.dia_prefix} ${String(d).padStart(2,'0')} · ${i18n.tornar_flexi_sub}`;
+  document.getElementById('modal-tornar-cancel').textContent = i18n.tornar_flexi_cancel;
+
+  const cont = document.getElementById('modal-tornar-opcions');
+  cont.innerHTML = '';
+  i18n.tornar_opcions.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'tornar-opt';
+    btn.innerHTML = `<span class="tornar-opt-icon">${opt.icon}</span>
+      <span class="tornar-opt-txt">
+        <span class="tornar-opt-tit">${opt.tit}</span>
+        <span class="tornar-opt-sub">${opt.sub}</span>
+      </span>`;
+    btn.onclick = () => {
+      document.getElementById('modal-tornar').classList.remove('open');
+      _desarTornarFlexi(clau, e, opt.id);
+    };
+    cont.appendChild(btn);
+  });
+
+  document.getElementById('modal-tornar').classList.add('open');
+}
+
+function _desarTornarFlexi(clau, e, tipusId) {
+  const infoEx = memoria[clau]||{};
+  const ni = {
+    fons: e.nouFons,
+    nomFons: e.nomEfectiu,
+    valor: -8,
+    nota: i18n.tornar_labels[tipusId] || tipusId,
+    tornarTipus: tipusId,
+    festiu: e.nouText===HEX_FESTIU
+  };
+  if (e.nouText!==null) ni.text = e.nouText;
+  memoria[clau] = ni;
+  desarTot();
+  mostrarMissatge(`✓ ${i18n.tornar_labels[tipusId]}`);
+  renderTot();
 }
 
 function _desarDiaSenseNota(clau, e) {
@@ -720,24 +848,28 @@ function renderRegistre() {
   for(let d=1;d<=31;d++){
     const clau=`${navAny}-${navMes}-${d}`;
     if(memoria[clau]){
-      const v=memoria[clau].valor||0;
-      const fons=memoria[clau].fons||COLOR_DEF;
+      const info=memoria[clau];
+      const v=info.valor||0;
+      const fons=info.fons||COLOR_DEF;
       const esPermisos = fons === HEX_PERMISOS_LOC;
       const esVacTreb = fons === HEX_VAC_TREB;
+      const esTornarFlexi = fons === HEX_TORNAR_FLEXI;
       const horesNoEstandard = (v!==-8&&v!==8&&v!==0);
-      if(esPermisos || esVacTreb || horesNoEstandard) {
-        ents.push({dia:d, val:v, fons, nota:memoria[clau].nota||''});
+      if(esPermisos || esVacTreb || esTornarFlexi || horesNoEstandard) {
+        ents.push({dia:d, val:v, fons, nota:info.nota||'', tornarTipus:info.tornarTipus||null});
       }
     }
   }
   if(!ents.length){el.innerHTML=`<div class="no-dades">${i18n.sense_dades}</div>`;return;}
-  ents.forEach(({dia,val,fons,nota})=>{
-    const nom=h2n[fons]||'';
+  ents.forEach(({dia,val,fons,nota,tornarTipus})=>{
+    const nomColor=h2n[fons]||'';
     const div=document.createElement('div');
     div.className='reg-item'; div.style.background=fons;
     div.style.color=(fons==='#781862')?'#FFF59D':'#212121';
-    let txt=`${i18n.dia_prefix} ${String(dia).padStart(2,'0')}   ${val}${i18n.hores_sufix}${nom?`   [${nom}]`:''}`;
-    if(nota) txt+=`\n${nota}`;
+    // Per Tornar Flexi, mostra el label del tipus en lloc del nom genèric
+    let etiqueta = tornarTipus ? (i18n.tornar_labels[tornarTipus]||nomColor) : nomColor;
+    let txt=`${i18n.dia_prefix} ${String(dia).padStart(2,'0')}   ${val}${i18n.hores_sufix}   [${etiqueta}]`;
+    if(nota && !tornarTipus) txt+=`\n${nota}`;
     div.style.whiteSpace='pre-wrap';
     div.textContent=txt;
     el.appendChild(div);
@@ -752,11 +884,13 @@ function renderComptadors() {
   COLORS_FONS.forEach(c=>{
     if(c.nom==='Laborable') return;
     if(c.hex===HEX_VAC_TREB) return;
+    // Ocultar Tornar Flexi del comptador (el seu efecte ja queda reflectit a Fer Flexi i als altres)
+    if(c.nom==='Tornar Flexi'||c.nom==='Devolver Flexi') return;
     if(vists.has(c.hex)) return;
     vists.add(c.hex);
-    const isFlexi=(c.nom==='+Flexi'||c.nom==='-Flexi'||c.nom===' Fer Flexi'||c.nom==='Tornar Flexi');
-    const nv=isFlexi?'Flexi':c.nom;
-    const k=isFlexi?'+Flexi':c.nom;
+    const isFerFlexi=(c.nom===' Fer Flexi'||c.nom==='Hacer Flexi');
+    const nv=isFerFlexi?'Flexi':c.nom;
+    const k=isFerFlexi?'+Flexi':c.nom;
     const h=calcularHores(c.nom);
     const comp=comptadors[k]||{};
     const vi=comp.valor_inicial||0;
@@ -791,6 +925,8 @@ function obrirModal(tit,cos,cb,perill=false){
 }
 document.getElementById('modal-no').onclick=()=>{ document.getElementById('modal').classList.remove('open'); _cb=null; };
 document.getElementById('modal-si').onclick=()=>{ document.getElementById('modal').classList.remove('open'); if(_cb){_cb();_cb=null;} };
+document.getElementById('modal-tornar-cancel').onclick=()=>{ document.getElementById('modal-tornar').classList.remove('open'); };
+document.getElementById('modal-tornar').addEventListener('click', function(ev){ if(ev.target===this) this.classList.remove('open'); });
 
 function confirmarDesarIni(k,nv){
   const inp=document.getElementById(`ini-${k}`);
