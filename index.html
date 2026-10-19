@@ -206,7 +206,7 @@
       <div id="comptadors-llista"></div>
       <hr class="dv">
       <div class="card-title" id="lbl-comptadors-dies" style="margin-top:4px">Resum de dies</div>
-      <div id="dies-anuals-llista" style="display:flex;gap:10px;margin-bottom:4px"></div>
+      <div id="dies-anuals-llista" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px"></div>
       <hr class="dv">
       <div class="accio-row" style="margin-bottom:10px">
         <button class="btn-accio" style="background:#C8E6C9;color:#1B5E20" onclick="exportarBackup()">&#128190; <span id="lbl-exportar-copia">Exportar c&#242;pia</span></button>
@@ -301,6 +301,8 @@ const T = {
     hint_enter: '↵ Enter per confirmar',
     dies_treballats: 'Dies treballats',
     dies_no_treballats: 'Dies no treballats',
+    hores_totals: 'Hores totals',
+    hores_netes: 'Hores netes (−20min/dia)',
     lbl_comptadors_dies: 'Resum de dies',
     copia_exportada:  '✓ Còpia exportada',
     copia_restaurada: '✓ Còpia restaurada',
@@ -399,6 +401,8 @@ const T = {
     hint_enter: '↵ Enter para confirmar',
     dies_treballats: 'Días trabajados',
     dies_no_treballats: 'Días no trabajados',
+    hores_totals: 'Horas totales',
+    hores_netes: 'Horas netas (−20min/día)',
     lbl_comptadors_dies: 'Resumen de días',
     copia_exportada:  '✓ Copia exportada',
     copia_restaurada: '✓ Copia restaurada',
@@ -634,28 +638,40 @@ function vacancesPendentsTotal() {
 }
 
 function calcularCC() {
-  // Multi-any: tota la memòria. valor_inicial és ajust manual.
   const c = comptadors['C.C.']||{};
   let total = c.valor_inicial||0;
   const avui = new Date(); avui.setHours(0,0,0,0);
-  // Recorrem tota la memòria (no limitat a l'any actual)
-  Object.entries(memoria).forEach(([clau, info]) => {
-    const [a,m,d] = clau.split('-').map(Number);
-    const dt = new Date(a,m-1,d);
-    if (dt > avui) return;
-    const noLab = esNoLab(clau, info);
-    if (info.fons===HEX_CC) {
-      total += (info.valor||0);
-    } else if (info.fons===HEX_VAC_TREB && info.vacTrebTipus==='vt_cc') {
-      total += 8;
-    } else if (info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_cc') {
-      total -= 8;
-    } else if (noLab && info.fons!==HEX_VACANCES && info.fons!==HEX_PERMISOS &&
-               info.fons!==HEX_LL_DISP && info.fons!==HEX_FER_FLEXI &&
-               info.fons!==HEX_TORNAR_FLEXI && info.fons!==HEX_VAC_TREB) {
-      total += 8;
+  // Si s'ha fet un ajust manual, comptem des del 01/01 d'aquell any; si no, des de sempre
+  const inici = c.any_canvi ? new Date(c.any_canvi, 0, 1) : new Date(0);
+  // Lògica CC:
+  // · DS/DG/festiu GRIS (fons null o #F5F5F5) → treballes → +8h
+  // · DS/DG/festiu amb color de fons distint de gris → no acumula res
+  // · Laborable marcat CC blau → gastes CC → valor guardat (negatiu)
+  // · Laborable gris o altres colors → res
+  // · VacTreb→CC: +8  /  TornarFlexi→CC: -8
+  const esGris = (f) => !f || f === COLOR_DEF;
+  let cur = new Date(inici);
+  while (cur <= avui) {
+    const a=cur.getFullYear(), m=cur.getMonth()+1, d=cur.getDate();
+    const clau = `${a}-${m}-${d}`;
+    const info = memoria[clau] || {};
+    const fons = info.fons || null;
+    const esFestiu = info.text === HEX_FESTIU;
+    const dw = (()=>{ const x=new Date(a,m-1,d).getDay(); return x===0?6:x-1; })();
+    const esNoLab = (dw===5 || dw===6 || esFestiu);
+
+    if (esNoLab) {
+      // Gris (sense color o #F5F5F5) → treballes → +8h CC
+      if (esGris(fons)) total += 8;
+      // Amb color de fons → no acumula res
+    } else {
+      // Laborable
+      if (fons===HEX_CC)                                                   total += (info.valor||0);
+      else if (fons===HEX_VAC_TREB && info.vacTrebTipus==='vt_cc')        total += 8;
+      else if (fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_cc') total -= 8;
     }
-  });
+    cur.setDate(cur.getDate()+1);
+  }
   return total;
 }
 
@@ -670,9 +686,11 @@ function calcularHores(nom) {
   if (isFlexi) {
     const c = comptadors['+Flexi']||{};
     let total = c.valor_inicial||0;
+    const inici = c.any_canvi ? new Date(c.any_canvi, 0, 1) : new Date(0);
     Object.entries(memoria).forEach(([clau,info])=>{
       const [a,m,d] = clau.split('-').map(Number);
-      if (new Date(a,m-1,d) > avui) return;
+      const dt = new Date(a,m-1,d);
+      if (dt < inici || dt > avui) return;
       if (info.fons===HEX_FER_FLEXI)    total += 8;
       if (info.fons===HEX_TORNAR_FLEXI) total -= 8;
     });
@@ -1213,8 +1231,9 @@ function renderComptadors() {
           <button class="comp-reset" onclick="obrirModalInicidAny()">&#9998;</button>
         </div>
         <div class="comp-f2">
-          <label>${i18n.dies_inicials}</label>
-          <input class="ini-input" id="ini-Vacances" type="number" value="${diesAssig}" data-en-dies="true">
+          <label>${i18n.hores_inicials}</label>
+          <input class="ini-input" id="ini-Vacances" type="number" value="${diesAssig*8}">
+          <span style="font-size:11px;color:var(--text-muted);margin-left:4px" id="lbl-dies-Vacances">(${diesAssig} ${i18n.dies_sufix})</span>
           <button class="ini-save" onclick="desarDiesAnuals('Vacances','${nv}')">&#10003;</button>
         </div>
         ${pendents > 0 ? `
@@ -1234,8 +1253,9 @@ function renderComptadors() {
           <button class="comp-reset" onclick="obrirModalInicidAny()">&#9998;</button>
         </div>
         <div class="comp-f2">
-          <label>${i18n.dies_inicials}</label>
-          <input class="ini-input" id="ini-LlDisp" type="number" value="${diesAssig}" data-en-dies="true">
+          <label>${i18n.hores_inicials}</label>
+          <input class="ini-input" id="ini-LlDisp" type="number" value="${diesAssig*8}">
+          <span style="font-size:11px;color:var(--text-muted);margin-left:4px" id="lbl-dies-LlDisp">(${diesAssig} ${i18n.dies_sufix})</span>
           <button class="ini-save" onclick="desarDiesAnuals('Ll. Disp.','${nv}')">&#10003;</button>
         </div>`;
     } else if (isPermisos) {
@@ -1254,12 +1274,13 @@ function renderComptadors() {
           <div class="comp-color" style="background:${c.hex}"></div>
           <span class="comp-nom">${nv}</span>
           <span class="comp-total">${sg}${h}h <span class="comp-dies">(${diesText} ${i18n.dies_sufix})</span></span>
-          <span class="comp-data" style="font-size:9px">∞ multi-any</span>
+          <span class="comp-data">${comp.any_canvi ? `${i18n.des_de} 01/01/${comp.any_canvi}` : '∞ multi-any'}</span>
           <button class="comp-reset" onclick="confirmarReinit('${k}','${nv}')">&#8635;</button>
         </div>
         <div class="comp-f2">
           <label>${i18n.hores_inicials}</label>
-          <input class="ini-input" id="ini-${k}" type="number" value="${vi}" data-en-dies="false">
+          <input class="ini-input" id="ini-${k}" type="number" value="${vi}" oninput="actualitzarLblDies('${k}',this.value)">
+          <span style="font-size:11px;color:var(--text-muted);margin-left:4px" id="lbl-dies-${k}">(${(vi/8).toFixed(1).replace('.0','')} ${i18n.dies_sufix})</span>
           <button class="ini-save" onclick="confirmarDesarIni('${k}','${nv}')">&#10003;</button>
         </div>`;
     }
@@ -1267,12 +1288,22 @@ function renderComptadors() {
   });
 }
 
+function actualitzarLblDies(k, val) {
+  const h = parseFloat(val)||0;
+  const dies = h/8;
+  const diesText = Number.isInteger(dies) ? dies : dies.toFixed(1);
+  const lbl = document.getElementById(`lbl-dies-${k}`);
+  if (lbl) lbl.textContent = `(${diesText} ${i18n.dies_sufix})`;
+}
+
 function desarDiesAnuals(clauComp, nv) {
+  // Ara l'input és en HORES; es guarda en dies (hores/8) per compatibilitat interna
   const idMap = { 'Vacances':'ini-Vacances', 'Ll. Disp.':'ini-LlDisp' };
   const inp = document.getElementById(idMap[clauComp]);
   if (!inp) return;
-  const dies = parseInt(inp.value||'0')||0;
-  const any  = new Date().getFullYear();
+  const hores = parseInt(inp.value||'0')||0;
+  const dies  = hores / 8;
+  const any   = new Date().getFullYear();
   if (!comptadors.anys) comptadors.anys = {};
   if (!comptadors.anys[any]) comptadors.anys[any] = {};
   comptadors.anys[any][clauComp] = dies;
@@ -1325,7 +1356,9 @@ function confirmarDesarIni(k,nv){
   const unitat = enDies ? i18n.dies_sufix : 'h';
   obrirModal(i18n.mod_ini_tit(nv), i18n.mod_ini_cos_u(vaDisplay, vnRaw, unitat), ()=>{
     if(!comptadors[k]){const a=new Date();comptadors[k]={any:a.getFullYear(),mes:a.getMonth()+1,dia:a.getDate(),valor_inicial:0};}
-    comptadors[k].valor_inicial=vn; desarTot(); renderComptadors();
+    comptadors[k].valor_inicial = vn;
+    comptadors[k].any_canvi = new Date().getFullYear(); // càlcul des del 01/01 d'aquest any
+    desarTot(); renderComptadors();
   });
   document.getElementById('modal-no').onclick=()=>{
     document.getElementById('modal').classList.remove('open');
@@ -1415,17 +1448,35 @@ function renderDiesAnuals() {
   const { treballats, noTreballats } = calcularDiesAnuals();
   const any = new Date().getFullYear();
   const subtit = `01/01/${any} — ${new Date().toLocaleDateString(i18n.locale, {day:'2-digit',month:'2-digit',year:'numeric'})}`;
+
+  // Hores totals i netes (−20min = −1/3h per dia treballat)
+  const horesTotals   = treballats * 8;
+  const minDescans    = treballats * 20;
+  const horesNetes    = horesTotals - minDescans / 60;
+  const fmtH = (h) => {
+    const hh = Math.floor(h);
+    const mm = Math.round((h - hh) * 60);
+    return mm > 0 ? `${hh}h ${mm}min` : `${hh}h`;
+  };
+
+  // Targetes de dies
   const items = [
-    { n: treballats,    lbl: i18n.dies_treballats,    bg:'#E8F5E9', tc:'#1B5E20' },
-    { n: noTreballats,  lbl: i18n.dies_no_treballats, bg:'#FFF3E0', tc:'#E65100' },
+    { n: treballats,   lbl: i18n.dies_treballats,    bg:'#E8F5E9', tc:'#1B5E20' },
+    { n: noTreballats, lbl: i18n.dies_no_treballats, bg:'#FFF3E0', tc:'#E65100' },
   ];
-  items.forEach(({n, lbl, bg, tc}) => {
+  items.forEach(({n, lbl, bg, tc}, idx) => {
     const d = document.createElement('div');
     d.className = 'die-card';
     d.style.background = bg;
+    // Targeta de dies treballats: afegir hores netes en lletra petita
+    const horesNoTrebNetes = noTreballats * 8 + minDescans / 60;
+    const extres = (idx === 0)
+      ? `<span style="font-size:10px;color:${tc};opacity:.75;font-family:'DM Mono',monospace;line-height:1.3;text-align:center;display:block">${fmtH(horesNetes)} ${i18n.hores_netes}</span>`
+      : `<span style="font-size:10px;color:${tc};opacity:.75;font-family:'DM Mono',monospace;line-height:1.3;text-align:center;display:block">${fmtH(horesNoTrebNetes)} ${i18n.hores_netes}</span>`;
     d.innerHTML = `<span class="die-num" style="color:${tc}">${n}</span>
       <span class="die-sub" style="color:${tc};opacity:.7;font-family:'DM Mono',monospace;font-size:11px">(${n*8}h)</span>
       <span class="die-lbl" style="color:${tc}">${lbl}</span>
+      ${extres}
       <span class="die-sub">${subtit}</span>`;
     el.appendChild(d);
   });
