@@ -637,19 +637,21 @@ function vacancesPendentsTotal() {
   return total;
 }
 
+// Hores reals d'un dia: usa info.valor si existeix, sinó 8 per defecte
+function horesDia(info) { return Math.abs(info.valor||8); }
+
+const esGris = (f) => !f || f === COLOR_DEF;
+
 function calcularCC() {
   const c = comptadors['C.C.']||{};
   let total = c.valor_inicial||0;
   const avui = new Date(); avui.setHours(0,0,0,0);
-  // Si s'ha fet un ajust manual, comptem des del 01/01 d'aquell any; si no, des de sempre
-  const inici = c.any_canvi ? new Date(c.any_canvi, 0, 1) : new Date(0);
+  const inici = new Date(c.any_canvi || avui.getFullYear(), 0, 1);
   // Lògica CC:
-  // · DS/DG/festiu GRIS (fons null o #F5F5F5) → treballes → +8h
-  // · DS/DG/festiu amb color de fons distint de gris → no acumula res
-  // · Laborable marcat CC blau → gastes CC → valor guardat (negatiu)
-  // · Laborable gris o altres colors → res
-  // · VacTreb→CC: +8  /  TornarFlexi→CC: -8
-  const esGris = (f) => !f || f === COLOR_DEF;
+  // · DS/DG/festiu GRIS → treballes → +horesDia (normalment +8, pot ser parcial)
+  // · DS/DG/festiu amb color → no acumula res
+  // · Laborable CC blau → gastes CC → info.valor (negatiu, pot ser parcial)
+  // · VacTreb→CC +8 / TornarFlexi→CC -8 (sempre jornada completa)
   let cur = new Date(inici);
   while (cur <= avui) {
     const a=cur.getFullYear(), m=cur.getMonth()+1, d=cur.getDate();
@@ -661,14 +663,12 @@ function calcularCC() {
     const esNoLab = (dw===5 || dw===6 || esFestiu);
 
     if (esNoLab) {
-      // Gris (sense color o #F5F5F5) → treballes → +8h CC
-      if (esGris(fons)) total += 8;
-      // Amb color de fons → no acumula res
+      if (esGris(fons)) total += 8;  // gris → treballes → +8h CC
+      // blau CC o qualsevol altre color → res
     } else {
-      // Laborable
-      if (fons===HEX_CC)                                                   total += (info.valor||0);
-      else if (fons===HEX_VAC_TREB && info.vacTrebTipus==='vt_cc')        total += 8;
-      else if (fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_cc') total -= 8;
+      if (fons===HEX_CC) total += (info.valor||0); // laborable CC → gasta (valor negatiu)
+      else if (fons===HEX_VAC_TREB && info.vacTrebTipus==='vt_cc')         total += 8;
+      else if (fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_cc')  total -= 8;
     }
     cur.setDate(cur.getDate()+1);
   }
@@ -681,46 +681,43 @@ function calcularHores(nom) {
   const avui = new Date(); avui.setHours(0,0,0,0);
   const anyActual = avui.getFullYear();
 
-  // ── Flexi: multi-any ──
+  // ── Flexi: multi-any, usa info.valor real ──
   const isFlexi = (nom===' Fer Flexi'||nom==='Hacer Flexi'||nom==='Tornar Flexi'||nom==='Devolver Flexi');
   if (isFlexi) {
     const c = comptadors['+Flexi']||{};
     let total = c.valor_inicial||0;
-    const inici = c.any_canvi ? new Date(c.any_canvi, 0, 1) : new Date(0);
+    const inici = new Date(c.any_canvi || avui.getFullYear(), 0, 1);
     Object.entries(memoria).forEach(([clau,info])=>{
       const [a,m,d] = clau.split('-').map(Number);
       const dt = new Date(a,m-1,d);
       if (dt < inici || dt > avui) return;
-      if (info.fons===HEX_FER_FLEXI)    total += 8;
-      if (info.fons===HEX_TORNAR_FLEXI) total -= 8;
+      if (info.fons===HEX_FER_FLEXI)    total += horesDia(info);
+      if (info.fons===HEX_TORNAR_FLEXI) total -= horesDia(info);
     });
     return total;
   }
 
-  // ── Vacances: anual + pendents ──
+  // ── Vacances: anual + pendents, usa info.valor real ──
   const isVacances = (nom==='Vacances'||nom==='Vacaciones');
   if (isVacances) {
     const inici = new Date(anyActual, 0, 1);
-    // Dies assignats enguany (en hores)
     let total = diesAnuals('Vacances', anyActual) * 8;
-    // Afegir pendents d'anys anteriors (en hores)
     total += vacancesPendentsTotal() * 8;
-    // Descomptar dies gastats enguany
     Object.entries(memoria).forEach(([clau,info])=>{
       const [a,m,d] = clau.split('-').map(Number);
       const dt = new Date(a,m-1,d);
       if (dt < inici || dt > avui) return;
       if (info.fons===HEX_VACANCES) {
         const dw = (()=>{ const x=new Date(a,m-1,d).getDay(); return x===0?6:x-1; })();
-        if (dw!==6 && info.text!==HEX_FESTIU) total -= 8;
+        if (dw!==6 && info.text!==HEX_FESTIU) total -= horesDia(info);
       }
       else if (info.fons===HEX_VAC_TREB && (info.vacTrebTipus==='vt_paga'||info.vacTrebTipus==='vt_cc')) total -= 8;
-      else if (info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_vac') total -= 8;
+      else if (info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_vac') total -= horesDia(info);
     });
     return total;
   }
 
-  // ── Ll. Disp.: anual ──
+  // ── Ll. Disp.: anual, usa info.valor real ──
   const isLlDisp = (nom==='Ll. Disp.'||nom==='L. Disp.');
   if (isLlDisp) {
     const inici = new Date(anyActual, 0, 1);
@@ -729,8 +726,8 @@ function calcularHores(nom) {
       const [a,m,d] = clau.split('-').map(Number);
       const dt = new Date(a,m-1,d);
       if (dt < inici || dt > avui) return;
-      if (info.fons===HEX_LL_DISP) total -= 8;
-      else if (info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_ll') total -= 8;
+      if (info.fons===HEX_LL_DISP) total -= horesDia(info);
+      else if (info.fons===HEX_TORNAR_FLEXI && info.tornarTipus==='tornar_ll') total -= horesDia(info);
     });
     return total;
   }
@@ -839,36 +836,53 @@ document.getElementById('mai-btn').onclick = () => {
 };
 
 function calcularDiesAnuals() {
+  // Retorna hores treballades i no treballades (pot ser fraccionari si hi ha hores parcials)
   const avui = new Date(); avui.setHours(0,0,0,0);
   const inici = new Date(avui.getFullYear(), 0, 1);
-  let treballats = 0, noTreballats = 0;
+  let horesTreb = 0, horesNoTreb = 0;
   let cur = new Date(inici);
   while (cur <= avui) {
     const clau = `${cur.getFullYear()}-${cur.getMonth()+1}-${cur.getDate()}`;
     const info = memoria[clau] || {};
     const dw = (()=>{ const x=cur.getDay(); return x===0?6:x-1; })();
     const esDsODg = dw===5 || dw===6;
+    const esFestiu = info.text === HEX_FESTIU;
+    const esNoLab = esDsODg || esFestiu;
     const fons = info.fons || COLOR_DEF;
+    const h = horesDia(info); // hores reals del dia (per defecte 8)
 
-    let treballat;
-    if (esDsODg) {
-      treballat = (fons === COLOR_DEF);
+    if (esNoLab) {
+      if (esGris(fons))      { horesTreb += 8; }    // gris → dia complet treballat
+      else if (fons!==HEX_CC){ horesNoTreb += 8; }  // altres colors → no treballat
+      // DS/DG/festiu CC → no suma res (no és un dia normal)
     } else {
-      const esVacances    = fons === HEX_VACANCES;
-      const esPermisos    = fons === HEX_PERMISOS;
-      const esFerFlexi    = fons === HEX_FER_FLEXI;
-      const esCC          = fons === HEX_CC;
-      const esLlDisp      = fons === HEX_LL_DISP;
-      // Tornar Flexi sense canvi → treballat; amb canvi (CC/Ll/Vac) → no treballat
-      const esTornarFlexiNoTreballat = fons === HEX_TORNAR_FLEXI && info.tornarTipus !== 'tornar';
-      // Vac.Treb. (vt_paga i vt_cc) sempre és dia treballat — no s'exclou
-      treballat = !esVacances && !esPermisos && !esFerFlexi && !esCC && !esLlDisp && !esTornarFlexiNoTreballat;
-    }
+      // Laborable
+      const esVacances = fons === HEX_VACANCES;
+      const esPermisos = fons === HEX_PERMISOS;
+      const esFerFlexi = fons === HEX_FER_FLEXI;
+      const esCC       = fons === HEX_CC;
+      const esLlDisp   = fons === HEX_LL_DISP;
+      const esTornarFlexiNoTreb = fons === HEX_TORNAR_FLEXI && info.tornarTipus !== 'tornar';
 
-    if (treballat) treballats++; else noTreballats++;
+      if (esVacances || esPermisos || esFerFlexi || esTornarFlexiNoTreb) {
+        // Totalment no treballat
+        horesNoTreb += 8;
+      } else if (esCC) {
+        // Laborable CC: h hores no treballades (gastes CC), la resta treballades
+        horesNoTreb += h;
+        horesTreb   += (8 - h);
+      } else if (esLlDisp) {
+        // Laborable Ll.Disp.: h hores no treballades, la resta treballades
+        horesNoTreb += h;
+        horesTreb   += (8 - h);
+      } else {
+        // Treballat (Laborable, VacTreb, TornarFlexi simple)
+        horesTreb += 8;
+      }
+    }
     cur.setDate(cur.getDate() + 1);
   }
-  return { treballats, noTreballats };
+  return { horesTreb, horesNoTreb };
 }
 
 function ciclarColor(t) {
@@ -944,10 +958,15 @@ function _calcularEntradaDia(clau) {
   else      { nouText = infoEx.text||null; }
 
   let val;
-  if (chkV) { val = valorDia; }
+  const esNoLabDia = (esDs||esDg||(nouText===HEX_FESTIU));
+  if (chkV) {
+    // Amb modificar hores: CC laborable → negatiu (gastes), CC no-lab → positiu (guanyes)
+    if (nomEfectiu==='C.C.') { val = esNoLabDia ? Math.abs(valorDia) : -Math.abs(valorDia); }
+    else { val = valorDia; }
+  }
   else if (nomEfectiu==='+Flexi'||nomEfectiu===' Fer Flexi') { val=8; }
   else if (nomEfectiu==='-Flexi'||nomEfectiu==='Tornar Flexi') { val=-8; }
-  else if (nomEfectiu==='C.C.') { val = (esDs||esDg||(nouText===HEX_FESTIU)) ? 8 : -8; }
+  else if (nomEfectiu==='C.C.') { val = esNoLabDia ? 8 : -8; }
   else if (nouFons===HEX_VAC_TREB) { val = -8; }
   else if (nouFons===HEX_VACANCES && (nouText===HEX_FESTIU || esDg)) { val = 0; }
   else { val = -8; }
@@ -1445,38 +1464,38 @@ function mostrarMissatge(txt){
 function renderDiesAnuals() {
   const el = document.getElementById('dies-anuals-llista');
   el.innerHTML = '';
-  const { treballats, noTreballats } = calcularDiesAnuals();
+  const { horesTreb, horesNoTreb } = calcularDiesAnuals();
   const any = new Date().getFullYear();
   const subtit = `01/01/${any} — ${new Date().toLocaleDateString(i18n.locale, {day:'2-digit',month:'2-digit',year:'numeric'})}`;
 
-  // Hores totals i netes (−20min = −1/3h per dia treballat)
-  const horesTotals   = treballats * 8;
-  const minDescans    = treballats * 20;
-  const horesNetes    = horesTotals - minDescans / 60;
   const fmtH = (h) => {
     const hh = Math.floor(h);
     const mm = Math.round((h - hh) * 60);
     return mm > 0 ? `${hh}h ${mm}min` : `${hh}h`;
   };
+  const fmtDies = (h) => {
+    const d = h / 8;
+    return Number.isInteger(d) ? d : d.toFixed(1);
+  };
 
-  // Targetes de dies
+  // Hores netes: descomptem 20min per cada hora treballada equivalent a un dia complet
+  // Proporcionalment: 20min/8h = 1/24 de les hores treballades
+  const minDescans  = horesTreb * (20/60) / 8; // 20min per cada 8h treballades
+  const horesNetes  = horesTreb - minDescans;
+  const horesNoTrebNetes = horesNoTreb + minDescans;
+
   const items = [
-    { n: treballats,   lbl: i18n.dies_treballats,    bg:'#E8F5E9', tc:'#1B5E20' },
-    { n: noTreballats, lbl: i18n.dies_no_treballats, bg:'#FFF3E0', tc:'#E65100' },
+    { h: horesTreb,   hn: horesNetes,        lbl: i18n.dies_treballats,    bg:'#E8F5E9', tc:'#1B5E20' },
+    { h: horesNoTreb, hn: horesNoTrebNetes,   lbl: i18n.dies_no_treballats, bg:'#FFF3E0', tc:'#E65100' },
   ];
-  items.forEach(({n, lbl, bg, tc}, idx) => {
+  items.forEach(({h, hn, lbl, bg, tc}) => {
     const d = document.createElement('div');
     d.className = 'die-card';
     d.style.background = bg;
-    // Targeta de dies treballats: afegir hores netes en lletra petita
-    const horesNoTrebNetes = noTreballats * 8 + minDescans / 60;
-    const extres = (idx === 0)
-      ? `<span style="font-size:10px;color:${tc};opacity:.75;font-family:'DM Mono',monospace;line-height:1.3;text-align:center;display:block">${fmtH(horesNetes)} ${i18n.hores_netes}</span>`
-      : `<span style="font-size:10px;color:${tc};opacity:.75;font-family:'DM Mono',monospace;line-height:1.3;text-align:center;display:block">${fmtH(horesNoTrebNetes)} ${i18n.hores_netes}</span>`;
-    d.innerHTML = `<span class="die-num" style="color:${tc}">${n}</span>
-      <span class="die-sub" style="color:${tc};opacity:.7;font-family:'DM Mono',monospace;font-size:11px">(${n*8}h)</span>
+    d.innerHTML = `<span class="die-num" style="color:${tc}">${fmtDies(h)}</span>
+      <span class="die-sub" style="color:${tc};opacity:.7;font-family:'DM Mono',monospace;font-size:11px">(${fmtH(h)})</span>
       <span class="die-lbl" style="color:${tc}">${lbl}</span>
-      ${extres}
+      <span style="font-size:10px;color:${tc};opacity:.75;font-family:'DM Mono',monospace;line-height:1.3;text-align:center;display:block">${fmtH(hn)} ${i18n.hores_netes}</span>
       <span class="die-sub">${subtit}</span>`;
     el.appendChild(d);
   });
